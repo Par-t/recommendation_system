@@ -1,0 +1,27 @@
+# Training image for recommendation model
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code only (no data)
+COPY pyproject.toml .
+COPY data/__init__.py data/
+COPY data/dataset.py data/
+COPY models/ models/
+COPY training/ training/
+COPY evaluation/ evaluation/
+
+# Install package
+RUN pip install --no-cache-dir -e .
+
+# Create mount points
+RUN mkdir -p outputs data/processed
+
+# Data should be mounted at runtime:
+#   -v /path/to/data/processed:/app/data/processed
+#   -v /path/to/outputs:/app/outputs
+CMD ["python", "training/train_single.py", "--data-dir", "data/processed", "--epochs", "10"]

@@ -1,26 +1,6 @@
 # Distributed Recommendation System
 
-An MLOps-focused recommendation system demonstrating distributed training, experiment tracking, and Kubernetes-based serving.
-
-**Focus**: ML systems engineering — not chasing SOTA accuracy.
-
-## Project Structure
-
-```
-recommendation/
-├── data/
-│   ├── preprocess.py      # Data pipeline
-│   └── dataset.py         # PyTorch Dataset
-├── models/
-│   └── ncf.py             # Neural Collaborative Filtering
-├── training/
-│   └── train_single.py    # Single-node training with MLflow
-├── evaluation/
-│   ├── metrics.py         # Recall@K, NDCG@K
-│   └── evaluate.py        # Model evaluation script
-├── requirements.txt
-└── pyproject.toml
-```
+MLOps-focused recommendation pipeline: distributed training, experiment tracking, containerized serving.
 
 ## Setup
 
@@ -32,67 +12,100 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-## Usage
+## Data
 
-### 1. Preprocess Data
+Download the Amazon Reviews dataset (JSONL format) and place it in the `data/` directory:
 
-Download the Amazon Reviews dataset (e.g., All_Beauty) and place the JSONL file in `data/`.
-
-```bash
-python data/preprocess.py \
-    --input data/All_Beauty.jsonl \
-    --output-dir data/processed \
-    --min-interactions 5
+```
+data/
+└── amazon-reviews_dataset.jsonl
 ```
 
-### 2. Train Model
+## Pipeline
 
+### 1. Preprocess
 ```bash
-python training/train_single.py \
-    --data-dir data/processed \
-    --epochs 10 \
-    --batch-size 256 \
-    --embedding-dim 64
+python data/preprocess.py --input data/amazon-reviews_dataset.jsonl --output-dir data/processed
 ```
 
-### 3. Evaluate
-
+### 2. Train (Single Node)
 ```bash
-python evaluation/evaluate.py \
-    --model-path outputs/model.pt \
-    --data-dir data/processed
+python training/train_single.py --data-dir data/processed --epochs 10
 ```
 
-### 4. View Experiments
-
+### 3. Train (Distributed)
 ```bash
-mlflow ui
-# Open http://127.0.0.1:5000
+torchrun --nproc_per_node=2 training/train_ddp.py --data-dir data/processed --epochs 10
 ```
 
-## Technical Decisions
+### 4. Evaluate
+```bash
+python evaluation/evaluate.py --model-path outputs/model.pt --data-dir data/processed
+```
 
-| Decision | Rationale |
-|----------|-----------|
-| Temporal split | Prevents data leakage (no future information in training) |
-| BPR loss | Optimizes ranking, not rating prediction |
-| Filter <5 interactions | Removes noise from sparse users/items |
-| MLflow tracking | Reproducible experiments with logged params/metrics |
-| Editable install (`pip install -e .`) | Production-style package structure |
+### 5. View Experiments
+```bash
+mlflow ui  # http://127.0.0.1:5000
+```
 
-## Metrics
+## Serving
 
-- **Recall@K**: Fraction of relevant items in top-K recommendations
-- **NDCG@K**: Ranking quality (rewards relevant items appearing earlier)
-- **Throughput**: Samples processed per second during training
+### Local
+```bash
+uvicorn serving.app:app --port 8000
+curl http://localhost:8000/health
+curl -X POST http://localhost:8000/recommend -H "Content-Type: application/json" -d '{"user_id": "USER_ID", "top_k": 5}'
+```
 
-## Roadmap
+### Docker
+```bash
+# Build
+docker build -f docker/Dockerfile.serving -t recommendation-api .
 
-- [x] Data preprocessing pipeline
-- [x] NCF model implementation
-- [x] Single-node training with MLflow
-- [x] Evaluation metrics (Recall@K, NDCG@K)
-- [ ] Distributed training (PyTorch DDP)
-- [ ] FastAPI serving endpoint
-- [ ] Docker containerization
-- [ ] Kubernetes deployment
+# Run (mount data and model)
+docker run -p 8000:8000 \
+  -v $(pwd)/data/processed:/app/data/processed \
+  -v $(pwd)/outputs:/app/outputs \
+  recommendation-api
+```
+
+### Docker Training
+```bash
+docker build -f docker/Dockerfile.training -t recommendation-training .
+
+docker run \
+  -v $(pwd)/data/processed:/app/data/processed \
+  -v $(pwd)/outputs:/app/outputs \
+  recommendation-training
+```
+
+## Project Structure
+
+```
+├── data/
+│   ├── preprocess.py       # Raw data → parquet splits
+│   └── dataset.py          # PyTorch Dataset with negative sampling
+├── models/
+│   └── ncf.py              # Neural Collaborative Filtering
+├── training/
+│   ├── train_single.py     # Single-node + MLflow
+│   └── train_ddp.py        # Distributed (PyTorch DDP)
+├── evaluation/
+│   ├── metrics.py          # Recall@K, NDCG@K
+│   └── evaluate.py         # Model evaluation
+├── serving/
+│   └── app.py              # FastAPI inference
+└── docker/
+    ├── Dockerfile.serving
+    └── Dockerfile.training
+```
+
+## Key Design Decisions
+
+| Decision | Why |
+|----------|-----|
+| Temporal split | Prevents data leakage |
+| BPR loss | Ranking > rating prediction |
+| Volume mounts | Data stays external to images |
+| MLflow | Reproducible experiment tracking |
+| DDP with gloo | CPU-based distributed training |
