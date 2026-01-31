@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Verify imports
+        run: |
+          python -c "
+          from data.dataset import InteractionDataset, load_stats
+          from models.ncf import NCF
+          from evaluation.metrics import recall_at_k, ndcg_at_k
+          from serving.app import app
+          print('All imports OK')
+          "
+
+      - name: Test model forward pass
+        run: |
+          python -c "
+          import torch
+          from models.ncf import NCF
+          model = NCF(num_users=100, num_items=100, embedding_dim=32)
+          users = torch.tensor([0, 1, 2])
+          items = torch.tensor([10, 20, 30])
+          scores = model(users, items)
+          assert scores.shape == (3,), 'Forward pass failed'
+          print('Model forward pass OK')
+          "
+
+      - name: Test BPR loss
+        run: |
+          python -c "
+          import torch
+          from models.ncf import NCF
+          model = NCF(num_users=100, num_items=100, embedding_dim=32)
+          users = torch.tensor([0, 1, 2])
+          pos = torch.tensor([10, 20, 30])
+          neg = torch.tensor([5, 15, 25])
+          loss = model.bpr_loss(users, pos, neg)
+          assert loss.item() > 0, 'BPR loss failed'
+          print('BPR loss OK')
+          "
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build serving image
+        run: docker build -f docker/Dockerfile.serving -t recommendation-api .
+
+      - name: Build training image
+        run: docker build -f docker/Dockerfile.training -t recommendation-training .
+
+      - name: Verify serving image
+        run: |
+          echo "Docker images built successfully"
+          docker images | grep recommendation
