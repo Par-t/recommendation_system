@@ -72,8 +72,8 @@ def evaluate_model(model, user_items_test: dict, num_items: int, k_values: list 
     model.eval()
     all_items = torch.arange(num_items)
     
-    results = {f"recall@{k}": [] for k in k_values}
-    results.update({f"ndcg@{k}": [] for k in k_values})
+    results = {f"recall_at_{k}": [] for k in k_values}
+    results.update({f"ndcg_at_{k}": [] for k in k_values})
     
     with torch.no_grad():
         for user_idx, ground_truth in user_items_test.items():
@@ -86,8 +86,8 @@ def evaluate_model(model, user_items_test: dict, num_items: int, k_values: list 
             
             # Compute metrics
             for k in k_values:
-                results[f"recall@{k}"].append(recall_at_k(ranked_items, ground_truth, k))
-                results[f"ndcg@{k}"].append(ndcg_at_k(ranked_items, ground_truth, k))
+                results[f"recall_at_{k}"].append(recall_at_k(ranked_items, ground_truth, k))
+                results[f"ndcg_at_{k}"].append(ndcg_at_k(ranked_items, ground_truth, k))
     
     # Average across users
     return {metric: np.mean(scores) for metric, scores in results.items()}

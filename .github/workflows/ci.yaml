@@ -28,7 +28,9 @@ jobs:
         run: |
           python -c "
           from data.dataset import InteractionDataset, load_stats
+          from data.preprocess import load_data, temporal_split, leave_one_out_split
           from models.ncf import NCF
+          from models.baselines import PopularityBaseline, RandomBaseline, MatrixFactorizationBaseline
           from evaluation.metrics import recall_at_k, ndcg_at_k
           from serving.app import app
           print('All imports OK')
@@ -59,6 +61,27 @@ jobs:
           loss = model.bpr_loss(users, pos, neg)
           assert loss.item() > 0, 'BPR loss failed'
           print('BPR loss OK')
+          "
+
+      - name: Test baselines
+        run: |
+          python -c "
+          import numpy as np
+          import torch
+          from models.baselines import PopularityBaseline, RandomBaseline
+          
+          # Test RandomBaseline
+          random_bl = RandomBaseline(num_items=100)
+          scores = random_bl(torch.tensor([0, 1]), torch.tensor([10, 20]))
+          assert scores.shape == (2,), 'RandomBaseline failed'
+          
+          # Test PopularityBaseline  
+          pop_scores = np.random.rand(100)
+          pop_bl = PopularityBaseline(pop_scores)
+          scores = pop_bl(torch.tensor([0, 1]), torch.tensor([10, 20]))
+          assert scores.shape == (2,), 'PopularityBaseline failed'
+          
+          print('Baselines OK')
           "
 
   docker:

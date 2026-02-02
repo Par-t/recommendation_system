@@ -54,12 +54,18 @@ python training/train_single.py --data-dir data/processed --epochs 10
 torchrun --nproc_per_node=2 training/train_ddp.py --data-dir data/processed --epochs 10
 ```
 
-### 4. Evaluate
+### 4. Baselines
+```bash
+python models/baselines.py --data-dir data/processed --baseline all
+```
+Evaluates popularity, random, and matrix factorization baselines. Results logged to MLflow `baselines` experiment.
+
+### 5. Evaluate NCF
 ```bash
 python evaluation/evaluate.py --model-path outputs/model.pt --data-dir data/processed
 ```
 
-### 5. View Experiments
+### 6. View Experiments
 ```bash
 mlflow ui  # http://127.0.0.1:5000
 ```
@@ -102,7 +108,8 @@ docker run \
 │   ├── preprocess.py       # Raw data → parquet splits
 │   └── dataset.py          # PyTorch Dataset with negative sampling
 ├── models/
-│   └── ncf.py              # Neural Collaborative Filtering
+│   ├── ncf.py              # Neural Collaborative Filtering
+│   └── baselines.py        # Popularity, Random, MF baselines
 ├── training/
 │   ├── train_single.py     # Single-node + MLflow
 │   └── train_ddp.py        # Distributed (PyTorch DDP)
@@ -123,8 +130,8 @@ docker run \
 | Temporal split | Prevents data leakage |
 | Leave-one-out split | Alternative for per-user evaluation |
 | Configurable filtering | Balance data size vs. quality |
+| Baselines (Pop, MF) | Benchmark to validate NCF improvement |
 | BPR loss | Ranking > rating prediction |
 | Volume mounts | Data stays external to images |
-| MLflow for preprocessing | Data lineage tracking |
-| MLflow for training | Reproducible experiment tracking |
+| MLflow | Tracks preprocessing, baselines, and training experiments |
 | DDP with gloo | CPU-based distributed training |
