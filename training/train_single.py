@@ -32,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--embedding-dim", type=int, default=64, help="Embedding dimension")
     parser.add_argument("--output-dir", type=str, default="outputs", help="Directory for model artifacts")
+    parser.add_argument("--save-model", action="store_true", help="Save model to disk (skip during sweeps)")
     return parser.parse_args()
 
 
@@ -121,17 +122,19 @@ def main():
         
         logger.info(f"Training complete in {total_time:.2f}s ({throughput:.0f} samples/sec)")
         
-        # Save model
-        model_path = output_dir / "model.pt"
-        torch.save({
-            "model_state_dict": model.state_dict(),
-            "num_users": num_users,
-            "num_items": num_items,
-            "embedding_dim": args.embedding_dim,
-        }, model_path)
+        run_id = mlflow.active_run().info.run_id[:8]
+        logger.info(f"Run ID: {run_id}")
         
-        mlflow.log_artifact(model_path)
-        logger.info(f"Model saved to {model_path}")
+        # Only save model if explicitly requested
+        if args.save_model:
+            model_path = output_dir / "model.pt"
+            torch.save({
+                "model_state_dict": model.state_dict(),
+                "num_users": num_users,
+                "num_items": num_items,
+                "embedding_dim": args.embedding_dim,
+            }, model_path)
+            logger.info(f"Model saved to {model_path}")
 
 
 if __name__ == "__main__":

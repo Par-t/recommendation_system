@@ -19,6 +19,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm
 
 from data.dataset import InteractionDataset, load_stats
 from models.ncf import NCF
@@ -47,6 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--embedding-dim", type=int, default=64, help="Embedding dimension")
     parser.add_argument("--output-dir", type=str, default="outputs", help="Directory for model artifacts")
+    parser.add_argument("--save-model", action="store_true", help="Save model to disk (skip during sweeps)")
     return parser.parse_args()
 
 
@@ -67,17 +69,26 @@ def train_epoch(
     model: DDP,
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
+    rank: int,
+    epoch: int,
+    total_epochs: int,
 ) -> float:
     """Train for one epoch, return average loss."""
     model.train()
     total_loss = 0.0
     
-    for users, pos_items, neg_items in dataloader:
+    # Progress bar only on rank 0
+    iterator = tqdm(dataloader, desc=f"Epoch {epoch+1}/{total_epochs}", disable=(rank != 0))
+    
+    for users, pos_items, neg_items in iterator:
         optimizer.zero_grad()
         loss = model.module.bpr_loss(users, pos_items, neg_items)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
+        
+        if rank == 0:
+            iterator.set_postfix(loss=f"{loss.item():.4f}")
     
     return total_loss / len(dataloader)
 
@@ -157,7 +168,7 @@ def main():
         sampler.set_epoch(epoch)
         
         epoch_start = time.time()
-        loss = train_epoch(model, train_loader, optimizer)
+        loss = train_epoch(model, train_loader, optimizer, rank, epoch, args.epochs)
         epoch_time = time.time() - epoch_start
         
         # Sync loss across all processes for accurate logging
@@ -185,17 +196,19 @@ def main():
         })
         logger.info(f"Training complete in {total_time:.2f}s ({throughput:.0f} samples/sec)")
         
-        # Save model (from rank 0 only)
-        model_path = output_dir / "model.pt"
-        torch.save({
-            "model_state_dict": model.module.state_dict(),  # .module to unwrap DDP
-            "num_users": num_users,
-            "num_items": num_items,
-            "embedding_dim": args.embedding_dim,
-        }, model_path)
+        run_id = mlflow.active_run().info.run_id[:8]
+        logger.info(f"Run ID: {run_id}")
         
-        mlflow.log_artifact(model_path)
-        logger.info(f"Model saved to {model_path}")
+        # Only save model if explicitly requested
+        if args.save_model:
+            model_path = output_dir / "model.pt"
+            torch.save({
+                "model_state_dict": model.module.state_dict(),  # .module to unwrap DDP
+                "num_users": num_users,
+                "num_items": num_items,
+                "embedding_dim": args.embedding_dim,
+            }, model_path)
+            logger.info(f"Model saved to {model_path}")
         mlflow.end_run()
     
     cleanup_distributed()

@@ -1,0 +1,12 @@
+# Minimal config for testing
+
+preprocessing:
+  - min_user: 3
+    min_item: 3
+    split_strategy: temporal
+    train_ratio: 0.7
+
+training:
+  - embedding_dim: 32
+    lr: 0.001
+    epochs: 2

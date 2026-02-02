@@ -65,7 +65,31 @@ Evaluates popularity, random, and matrix factorization baselines. Results logged
 python evaluation/evaluate.py --model-path outputs/model.pt --data-dir data/processed
 ```
 
-### 6. View Experiments
+### 6. Automated Experiment Sweep
+
+Run hyperparameter search across preprocessing and training configs:
+
+```bash
+python experiments/sweep.py --input data/All_Beauty.jsonl --config experiments/config.yaml
+```
+
+**Features:**
+- YAML-based config for preprocessing and training hyperparameters
+- Uses DDP by default for faster iteration
+- Resource monitoring (auto-adjusts based on CPU/memory)
+- Cleans up processed data after each config (reproducible from params)
+- All runs tagged with `config_id` for MLflow lineage tracking
+
+**Modes:**
+```bash
+# Full sweep (preprocess + train for each config)
+python experiments/sweep.py --input data/All_Beauty.jsonl --config experiments/config.yaml
+
+# Ablation only (on existing preprocessed data)
+python experiments/sweep.py --data-dir data/processed --config experiments/config.yaml
+```
+
+### 7. View Experiments
 ```bash
 mlflow ui  # http://127.0.0.1:5000
 ```
@@ -116,6 +140,10 @@ docker run \
 ├── evaluation/
 │   ├── metrics.py          # Recall@K, NDCG@K
 │   └── evaluate.py         # Model evaluation
+├── experiments/
+│   ├── sweep.py            # Automated hyperparameter sweep
+│   ├── resource_monitor.py # CPU/memory monitoring
+│   └── config.yaml         # Experiment configurations
 ├── serving/
 │   └── app.py              # FastAPI inference
 └── docker/
@@ -135,3 +163,7 @@ docker run \
 | Volume mounts | Data stays external to images |
 | MLflow | Tracks preprocessing, baselines, and training experiments |
 | DDP with gloo | CPU-based distributed training |
+| YAML experiment config | Research-grade, not hardcoded presets |
+| DDP by default in sweep | Faster hyperparameter search |
+| Separate DDP benchmark | One-time comparison, not every sweep |
+| Resource monitoring | Prevents system overload during sweeps |

@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -206,15 +207,31 @@ def leave_one_out_split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, p
     return train_df, val_df, test_df
 
 
+def generate_config_id(args) -> str:
+    """Generate unique config ID from preprocessing parameters."""
+    config = {
+        "min_user": args.min_user,
+        "min_item": args.min_item,
+        "split_strategy": args.split_strategy,
+        "train_ratio": args.train_ratio if args.split_strategy == "temporal" else None,
+    }
+    config_str = json.dumps(config, sort_keys=True)
+    return hashlib.md5(config_str.encode()).hexdigest()[:8]
+
+
 def main():
     args = parse_args()
+    
+    # Generate config ID for tracking
+    config_id = generate_config_id(args)
     
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Start MLflow run for data lineage
     mlflow.set_experiment("preprocessing")
-    with mlflow.start_run(run_name=f"preprocess_{args.split_strategy}"):
+    with mlflow.start_run(run_name=f"preprocess_{config_id}"):
+        mlflow.set_tag("config_id", config_id)
         # Log parameters
         mlflow.log_params({
             "input_file": Path(args.input).name,
@@ -267,6 +284,7 @@ def main():
         
         # Save stats
         stats = {
+            "config_id": config_id,
             "raw_interactions": raw_count,
             "filtered_interactions": len(df),
             "num_users": len(user_to_idx),
@@ -287,7 +305,15 @@ def main():
         
         # Log stats file as artifact
         mlflow.log_artifact(output_dir / "stats.json")
-        logger.info(f"Stats: {stats}")
+        
+        # Clear output for user
+        logger.info(f"\n{'='*60}")
+        logger.info(f"CONFIG_ID: {config_id}")
+        logger.info(f"OUTPUT: {output_dir}")
+        logger.info(f"{'='*60}")
+        logger.info(f"To run training ablations on this data:")
+        logger.info(f"  python experiments/sweep.py --data-dir {output_dir}")
+        logger.info(f"{'='*60}")
 
 
 if __name__ == "__main__":
