@@ -14,19 +14,35 @@ pip install -e .
 
 ## Data
 
-Download the Amazon Reviews dataset (JSONL format) and place it in the `data/` directory:
+Download the Amazon Reviews dataset (JSONL or CSV format) and place it in the `data/` directory:
 
 ```
 data/
-└── amazon-reviews_dataset.jsonl
+├── All_Beauty.jsonl         # Small dataset for testing
+└── Electronics.csv.gz       # Large dataset for benchmarking
 ```
 
 ## Pipeline
 
 ### 1. Preprocess
+
+Supports JSONL, CSV, and CSV.GZ formats. Two split strategies: temporal (default) or leave-one-out.
+
 ```bash
-python data/preprocess.py --input data/amazon-reviews_dataset.jsonl --output-dir data/processed
+# Basic (temporal split)
+python data/preprocess.py --input data/All_Beauty.jsonl --output-dir data/processed
+
+# With custom thresholds
+python data/preprocess.py --input data/All_Beauty.jsonl --output-dir data/processed --min-user 3 --min-item 3
+
+# Leave-one-out split
+python data/preprocess.py --input data/All_Beauty.jsonl --output-dir data/processed --split-strategy leave-one-out
+
+# Large CSV dataset
+python data/preprocess.py --input data/Electronics.csv.gz --output-dir data/processed_electronics --min-user 3 --min-item 3
 ```
+
+Preprocessing is tracked in MLflow under the `preprocessing` experiment.
 
 ### 2. Train (Single Node)
 ```bash
@@ -105,7 +121,10 @@ docker run \
 | Decision | Why |
 |----------|-----|
 | Temporal split | Prevents data leakage |
+| Leave-one-out split | Alternative for per-user evaluation |
+| Configurable filtering | Balance data size vs. quality |
 | BPR loss | Ranking > rating prediction |
 | Volume mounts | Data stays external to images |
-| MLflow | Reproducible experiment tracking |
+| MLflow for preprocessing | Data lineage tracking |
+| MLflow for training | Reproducible experiment tracking |
 | DDP with gloo | CPU-based distributed training |

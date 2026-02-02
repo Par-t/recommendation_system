@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY pyproject.toml .
 COPY data/__init__.py data/
 COPY data/dataset.py data/
+COPY data/preprocess.py data/
 COPY models/ models/
 COPY training/ training/
 COPY evaluation/ evaluation/

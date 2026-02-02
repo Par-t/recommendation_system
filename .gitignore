@@ -18,7 +18,9 @@ __pycache__/
 
 # Data (raw data too large, processed data is reproducible)
 data/*.jsonl
-data/processed/
+data/*.csv
+data/*.csv.gz
+data/processed*/
 
 # MLflow
 mlruns/
